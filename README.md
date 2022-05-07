@@ -478,57 +478,126 @@ function Hit_box_extender_head ()
 end
 
 function Aim_lock ()
-	-- // Dependencies
-	local Aiming = loadstring(game:HttpGet("https://raw.githubusercontent.com/Stefanuk12/ROBLOX/master/Universal/Aiming/Load.lua"))()
+   -- aim lock 
+local client = game.Players.LocalPlayer
+local camera = workspace.CurrentCamera
+local mouse = client:GetMouse()
+local players = game:GetService("Players")
+local rs = game:GetService("RunService")
+local uis = game:GetService("UserInputService")
 
-	-- // Services
-	local UserInputService = game:GetService("UserInputService")
-	local RunService = game:GetService("RunService")
 
-	-- // Vars
-	Aiming.AimLock = {
-		Enabled = true,
-		Keybind = Enum.UserInputType.MouseButton2, -- // You can also have Enum.KeyCode.E, etc.
-	}
-	local Settings = Aiming.AimLock
+for _, v in pairs(getgc(true)) do
+    if type(v) == "table" and type(rawget(v, 'getbodyparts')) == 'function' then
+        getbody = v
+    end
+end
 
-	-- //
-	function Settings.ShouldUseCamera()
-		-- //
-		return (UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter)
-	end
+for _, v in pairs(getgc(true)) do
+    if type(v) == "table" and rawget(v, "sensitivity") then
+        if v.sensitivity > 0.7 then
+            v.sensitivity = 0.5
+        end
+    end
+end
 
-	-- // Allows for custom
-	function Settings.AimLockPosition(CameraMode)
-		local Position = CameraMode and Aiming.SelectedPart.Position or Aiming.SelectedPosition
-		return Position, {}
-	end
+for _, v in pairs(getgc(true)) do
+    if type(v) == "table" and rawget(v, "aimsensitivity") then
+        if v.aimsensitivity > 0.7 then
+            v.aimsensitivity = 0.5
+        end
+    end
+end
 
-	-- // Constantly run
-	RunService:BindToRenderStep("AimLockAiming", 0, function()
-		-- // Vars
-		local Keybind = Settings.Keybind
-		local IsToggled = (Keybind.EnumType == Enum.KeyCode and UserInputService:IsKeyDown(Keybind) or UserInputService:IsMouseButtonPressed(Keybind))
 
-		-- // Make sure key (or mouse button) is down
-		if (Settings.Enabled and IsToggled and Aiming.Check()) then
-			-- // Vars
-			local CameraMode = Settings.ShouldUseCamera()
-			local Position, BeizerData = Settings.AimLockPosition(CameraMode)
 
-			-- // Aim with camera
-			if (CameraMode) then
-				Aiming.CameraLookAt(Position)
-			else
-				-- // Aim with mouse
-				BeizerData.TargetPosition = Position
-				Aiming.BeizerCurve.AimTo(BeizerData)
-			end
-		end
-	end)
+if not getgenv().aim_smooth then
+    getgenv().aim_smooth = 2
+end
 
-	-- //
-	return Aiming
+if not getgenv().aim_at then
+    getgenv().aim_at = "head"
+end
+
+if not getgenv().fov then
+    getgenv().fov = 400
+end
+
+local aimParts = {"head","torso"}
+local function randomAimPart(table)
+    local value = math.random(1,#table) -- Get random number with 1 to length of table.
+    return table[value]
+end
+
+
+local Rayparams = RaycastParams.new();
+Rayparams.FilterType = Enum.RaycastFilterType.Blacklist;
+
+
+
+local function CheckRay(from,to)
+    local CF = CFrame.new(from.Position, to.Position);
+    local Hit = game.Workspace:Raycast(CF.p, CF.LookVector * (from.Position - to.Position).magnitude, Rayparams);
+    if Hit.Instance.Name == "Head" then
+        return true
+    else
+        return false
+    end
+end
+
+
+
+
+local function closestPlayer(fov)
+    local target = nil
+    local closest = fov or math.huge
+    for i,v in ipairs(players:GetPlayers()) do
+        local character = getbody.getbodyparts(v)
+        if character and client.Character and v ~= client and v.TeamColor ~= client.TeamColor  then
+            local _, onscreen = camera:WorldToScreenPoint(character.head.Position)
+            if onscreen then
+                local targetPos = camera:WorldToViewportPoint(character.head.Position)
+                local mousePos = camera:WorldToViewportPoint(mouse.Hit.p)
+                local dist = (Vector2.new(mousePos.X, mousePos.Y) - Vector2.new(targetPos.X, targetPos.Y)).magnitude
+                Rayparams.FilterDescendantsInstances = {client.Character}
+                if dist < closest and CheckRay(game.Players.LocalPlayer.Character.Head,character.head) then
+                    closest = dist
+                    target = v
+                end
+            end
+        end
+    end
+    return target
+end
+
+local function aimAt(pos,smooth)
+    local targetPos = camera:WorldToScreenPoint(pos)
+    local mousePos = camera:WorldToScreenPoint(mouse.Hit.p)
+    mousemoverel((targetPos.X-mousePos.X)/smooth,(targetPos.Y-mousePos.Y)/smooth)
+end
+getgenv().random_aim = true
+local isAiming = false
+uis.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then
+        isAiming = true
+        if getgenv().random_aim then
+            getgenv().aim_at = randomAimPart(aimParts)
+        end
+    end
+end)
+uis.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then isAiming = false end
+end)
+
+rs.RenderStepped:connect(function()
+    local t = closestPlayer(getgenv().fov)
+    if isAiming and t and getgenv().aim_at ~= "random" and CheckRay(game.Players.LocalPlayer.Character.Head,getbody.getbodyparts(t).head)then
+        aimAt(getbody.getbodyparts(t)[getgenv().aim_at].Position, getgenv().aim_smooth)
+
+    elseif isAiming and t and getgenv().aim_at == "random" and CheckRay(game.Players.LocalPlayer.Character.Head,getbody.getbodyparts(t).head) then
+        aimAt(getbody.getbodyparts(t)[randomAimPart(aimParts)].Position, getgenv().aim_smooth)
+    end
+end)
 end
 
 function TracersG ()
